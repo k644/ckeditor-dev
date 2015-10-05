@@ -1287,7 +1287,9 @@
 			// Create a dataTransfer object and save it globally.
 			editable.attachListener( editor, 'dragstart', function( evt ) {
 				clipboard.initDragDataTransfer( evt, editor );
+			}, null, null, 2 );
 
+			editable.attachListener( editor, 'dragstart', function() {
 				// Save drag range globally for cross editor D&D.
 				var dragRange = clipboard.dragRange = editor.getSelection().getRanges()[ 0 ];
 
@@ -1296,7 +1298,7 @@
 					clipboard.dragStartContainerChildCount = dragRange ? getContainerChildCount( dragRange.startContainer ) : null;
 					clipboard.dragEndContainerChildCount = dragRange ? getContainerChildCount( dragRange.endContainer ) : null;
 				}
-			}, null, null, 2 );
+			}, null, null, 100 );
 
 			// -------------- DRAGEND --------------
 			// Clean up on dragend.
@@ -1753,34 +1755,28 @@
 				dropInsideDragRange =
 					// Must check endNode because dragRange could be collapsed in some edge cases (simulated DnD).
 					endNode &&
-					startNode.getPosition( dropNode ) == CKEDITOR.POSITION_PRECEDING &&
-					endNode.getPosition( dropNode ) == CKEDITOR.POSITION_FOLLOWING;
+					( startNode.getPosition( dropNode ) & CKEDITOR.POSITION_PRECEDING ) &&
+					( endNode.getPosition( dropNode ) & CKEDITOR.POSITION_FOLLOWING );
 
+			// If the drop range happens to be inside drag range change it's position to the beginning of the drag range.
 			if ( dropInsideDragRange ) {
-				// When we normally drag and drop, the selection is changed to dropRange,
-				// so here we simulate the same behavior.
-				editor.getSelection().selectRanges( [ dropRange ] );
-
-				// Remove bookmark spans.
-				startNode.remove();
-				endNode.remove();
-				dropNode.remove();
+				// We only change position of bookmark span that is connected with dropBookmark.
+				// dropRange will be overwritten and set to the dropBookmark later.
+				dropNode.insertBefore( startNode );
 			}
-			else {
-				// Drop range is outside drag range.
-				// No we can safely delete content for the drag range...
-				dragRange = editor.createRange();
-				dragRange.moveToBookmark( dragBookmark );
-				editable.extractHtmlFromRange( dragRange, 1 );
 
-				// ...and paste content into the drop position.
-				dropRange = editor.createRange();
-				dropRange.moveToBookmark( dropBookmark );
+			// No we can safely delete content for the drag range...
+			dragRange = editor.createRange();
+			dragRange.moveToBookmark( dragBookmark );
+			editable.extractHtmlFromRange( dragRange, 1 );
 
-				// We do not select drop range, because of may be in the place we can not set the selection
-				// (e.g. between blocks, in case of block widget D&D). We put range to the paste event instead.
-				firePasteEvents( editor, { dataTransfer: dataTransfer, method: 'drop', range: dropRange }, 1 );
-			}
+			// ...and paste content into the drop position.
+			dropRange = editor.createRange();
+			dropRange.moveToBookmark( dropBookmark );
+
+			// We do not select drop range, because of may be in the place we can not set the selection
+			// (e.g. between blocks, in case of block widget D&D). We put range to the paste event instead.
+			firePasteEvents( editor, { dataTransfer: dataTransfer, method: 'drop', range: dropRange }, 1 );
 
 			editor.fire( 'unlockSnapshot' );
 		},
@@ -2085,8 +2081,8 @@
 		}
 
 		this._ = {
-			metaRegExp: /^<meta.*?>/,
-			bodyRegExp: /<body(?:[\s\S]*?)>([\s\S]*)<\/body>/,
+			metaRegExp: /^<meta.*?>/i,
+			bodyRegExp: /<body(?:[\s\S]*?)>([\s\S]*)<\/body>/i,
 			fragmentRegExp: /<!--(?:Start|End)Fragment-->/g,
 
 			data: {},
